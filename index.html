@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Karnaugh Map Studio</title>
+    <meta
+      name="description"
+      content="Learn how to simplify Karnaugh maps with visual rules, worked examples, and an interactive 4-variable practice studio."
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero" id="top">
+        <nav class="topbar">
+          <a class="brand" href="#top">Karnaugh-Map Studio</a>
+          <div class="nav-links">
+            <a href="#rules">Rules</a>
+            <a href="#studio">Studio</a>
+            <a href="#examples">Examples</a>
+          </div>
+        </nav>
+
+        <div class="hero-copy">
+          <p class="eyebrow">Digital Logic Revision Tool</p>
+          <h1>Learn to simplify Karnaugh maps without memorizing blind patterns.</h1>
+          <p class="hero-text">
+            This site is built for electronics engineering students who want to
+            see why grouping works, how wrap-around adjacency behaves, and how a
+            minimized SOP expression is formed from a 4-variable map.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#studio">Open the Studio</a>
+            <button class="button button-secondary" data-preset="wrap" type="button">
+              Load a Wrap-Around Example
+            </button>
+          </div>
+        </div>
+
+        <div class="hero-panel">
+          <div class="panel-card">
+            <p class="panel-label">What students usually miss</p>
+            <ul class="quick-facts">
+              <li>Largest valid groups are almost always the right first move.</li>
+              <li>Opposite edges are adjacent because the map wraps around.</li>
+              <li>Overlapping groups are allowed when they reduce literals.</li>
+              <li>Don't-care cells can be used only when they help simplification.</li>
+            </ul>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="rules-section" id="rules">
+          <div class="section-heading">
+            <p class="eyebrow">Core Rules</p>
+            <h2>Five habits that make K-map simplification reliable.</h2>
+          </div>
+
+          <div class="rule-grid">
+            <article class="rule-card">
+              <span class="rule-number">01</span>
+              <h3>Read the map in Gray code order</h3>
+              <p>
+                Rows and columns differ by one bit at a time. That is why
+                neighboring cells represent terms that differ in only one
+                variable.
+              </p>
+            </article>
+
+            <article class="rule-card">
+              <span class="rule-number">02</span>
+              <h3>Group in powers of two</h3>
+              <p>
+                Valid groups are single cells, pairs, quads, octets, or the full
+                map. Rectangles can wrap across borders, but the area must stay a
+                power of two.
+              </p>
+            </article>
+
+            <article class="rule-card">
+              <span class="rule-number">03</span>
+              <h3>Always prefer bigger groups</h3>
+              <p>
+                A larger group removes more variables from the final term. Bigger
+                groups give simpler expressions.
+              </p>
+            </article>
+
+            <article class="rule-card">
+              <span class="rule-number">04</span>
+              <h3>Keep only the variables that stay fixed</h3>
+              <p>
+                If a variable changes inside a group, it disappears from that
+                term. If it stays constant, keep it in complemented or
+                uncomplemented form.
+              </p>
+            </article>
+
+            <article class="rule-card">
+              <span class="rule-number">05</span>
+              <h3>Use don't-cares strategically</h3>
+              <p>
+                Don't-cares are optional helpers. Include them only if they let
+                you grow a pair into a quad, a quad into an octet, or remove an
+                unnecessary literal.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="studio-section" id="studio">
+          <div class="section-heading">
+            <p class="eyebrow">Interactive Studio</p>
+            <h2>Build your own map and inspect every simplified term.</h2>
+          </div>
+
+          <div class="studio-shell">
+            <div class="studio-toolbar">
+              <div class="toolbar-group variable-group">
+                <span class="toolbar-label">Inputs</span>
+                <div class="chip-row">
+                  <button class="chip" data-variable-count="2" type="button">2</button>
+                  <button class="chip" data-variable-count="3" type="button">3</button>
+                  <button class="chip" data-variable-count="4" type="button">4</button>
+                  <button class="chip" data-variable-count="5" type="button">5</button>
+                  <button class="chip" data-variable-count="6" type="button">6</button>
+                </div>
+              </div>
+
+              <div class="toolbar-group">
+                <button class="button button-primary" data-action="clear" type="button">
+                  Clear Map
+                </button>
+                <button class="button button-secondary" data-action="random" type="button">
+                  Random Practice
+                </button>
+              </div>
+
+              <div class="toolbar-group preset-group" id="preset-group">
+              </div>
+            </div>
+
+            <div class="studio-layout">
+              <section class="map-panel">
+                <div class="map-header">
+                  <div>
+                    <p class="panel-label" id="map-type-label">4-Variable Karnaugh Map</p>
+                    <h3 id="map-title">Click a cell to cycle through <span>0</span>, <span>1</span>, and <span>X</span>.</h3>
+                  </div>
+                  <p class="map-legend" id="map-legend">
+                    Rows: <strong>AB</strong> in Gray order.
+                    Columns: <strong>CD</strong> in Gray order.
+                  </p>
+                </div>
+
+                <div class="kmap-stage" id="kmap-stage" aria-label="Interactive Karnaugh map"></div>
+
+                <div class="state-legend">
+                  <span><i class="legend-dot state-one"></i> 1 = minterm included</span>
+                  <span><i class="legend-dot state-zero"></i> 0 = minterm excluded</span>
+                  <span><i class="legend-dot state-x"></i> X = don't care</span>
+                </div>
+              </section>
+
+              <aside class="analysis-panel">
+                <div class="expression-card">
+                  <p class="panel-label">Minimal Forms</p>
+                  <div class="expression-grid">
+                    <div class="expression-block">
+                      <p class="summary-label">Minimal SOP</p>
+                      <h3 id="simplified-sop-expression">F = 0</h3>
+                    </div>
+                    <div class="expression-block">
+                      <p class="summary-label">Minimal POS</p>
+                      <h3 id="simplified-pos-expression">F = 1</h3>
+                    </div>
+                  </div>
+                  <p id="expression-caption">
+                    Add some 1-cells to start simplifying.
+                  </p>
+                </div>
+
+                <div class="summary-grid">
+                  <article class="summary-card">
+                    <p class="summary-label">Minterms</p>
+                    <p class="summary-value" id="minterm-list">none</p>
+                  </article>
+
+                  <article class="summary-card">
+                    <p class="summary-label">Maxterms</p>
+                    <p class="summary-value" id="maxterm-list">none</p>
+                  </article>
+
+                  <article class="summary-card">
+                    <p class="summary-label">Don't-cares</p>
+                    <p class="summary-value" id="dontcare-list">none</p>
+                  </article>
+                </div>
+
+                <article class="canonical-card">
+                  <p class="summary-label">Canonical Forms</p>
+                  <p id="canonical-sop-expression">
+                    F(A,B,C,D) = 0
+                  </p>
+                  <p id="canonical-pos-expression">
+                    F(A,B,C,D) = 1
+                  </p>
+                </article>
+
+                <article class="challenge-card">
+                  <p class="summary-label">How to read the result</p>
+                  <p id="challenge-copy">
+                    The explanation panel below breaks each SOP and POS group
+                    into the fixed variables that survive in the minimized forms.
+                  </p>
+                </article>
+
+                <div class="group-list" id="group-list"></div>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <section class="examples-section" id="examples">
+          <div class="section-heading">
+            <p class="eyebrow">Worked Examples</p>
+            <h2>Use the presets as quick revision drills.</h2>
+          </div>
+
+          <div class="example-grid">
+            <article class="example-card">
+              <p class="example-tag">Starter</p>
+              <h3>Begin with the smallest clean grouping for the active map.</h3>
+              <p>
+                The starter preset adapts to the selected input count so you can
+                practice the first valid grouping on 2 to 6 variables.
+              </p>
+              <button class="button button-secondary" data-preset="starter" type="button">
+                Load starter example
+              </button>
+            </article>
+
+            <article class="example-card">
+              <p class="example-tag">Boundary</p>
+              <h3>Practice wrap-around adjacency on the map edges.</h3>
+              <p>
+                The boundary preset shows how the first and last Gray-code rows
+                or columns still count as adjacent on larger maps.
+              </p>
+              <button class="button button-secondary" data-preset="wrap" type="button">
+                Load boundary example
+              </button>
+            </article>
+
+            <article class="example-card">
+              <p class="example-tag">Don't care</p>
+              <h3>Use X values only when they shrink the algebra.</h3>
+              <p>
+                Adding a don't-care to a group can reduce the number of literals
+                in the final answer. If it does not help, ignore it.
+              </p>
+              <button class="button button-secondary" data-preset="dontcare" type="button">
+                Load don't-care example
+              </button>
+            </article>
+          </div>
+        </section>
+
+        <section class="roadmap-section">
+          <div class="section-heading">
+            <p class="eyebrow">Exam-Day Checklist</p>
+            <h2>A clean sequence for solving any 2- to 6-variable Karnaugh map.</h2>
+          </div>
+
+          <div class="roadmap-grid">
+            <article class="roadmap-step">
+              <h3>1. Mark the 1s and Xs</h3>
+              <p>
+                Translate the minterms into the map using Gray code order. Keep
+                don't-cares visible because they might expand a group later.
+              </p>
+            </article>
+
+            <article class="roadmap-step">
+              <h3>2. Search for the largest rectangles first</h3>
+              <p>
+                Look for 32-cell and 16-cell groups before octets, octets before
+                quads, and quads before pairs. This avoids premature small
+                groups.
+              </p>
+            </article>
+
+            <article class="roadmap-step">
+              <h3>3. Allow overlap when it removes literals</h3>
+              <p>
+                A cell can belong to more than one group. Overlap is valid when it
+                helps create larger prime implicants.
+              </p>
+            </article>
+
+            <article class="roadmap-step">
+              <h3>4. Write one term per group</h3>
+              <p>
+                Keep only the variables that remain fixed inside that rectangle.
+                Drop every variable that changes.
+              </p>
+            </article>
+
+            <article class="roadmap-step">
+              <h3>5. OR all terms together</h3>
+              <p>
+                The final simplified SOP expression is the sum of every group
+                term needed to cover all 1-cells.
+              </p>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
