@@ -185,6 +185,7 @@ button {
 .roadmap-step p,
 .map-legend,
 #expression-caption,
+#logic-caption,
 #challenge-copy,
 #canonical-sop-expression,
 #canonical-pos-expression {
@@ -403,9 +404,15 @@ button {
   display: grid;
   gap: 16px;
   align-content: start;
+  min-width: 0;
+}
+
+.analysis-panel > * {
+  min-width: 0;
 }
 
 .expression-card,
+.logic-card,
 .canonical-card,
 .challenge-card,
 .summary-card,
@@ -416,6 +423,7 @@ button {
 }
 
 .expression-card,
+.logic-card,
 .canonical-card,
 .challenge-card {
   padding: 18px;
@@ -446,6 +454,48 @@ button {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.logic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.logic-header p {
+  margin: 0;
+}
+
+.logic-toggle {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chip-small {
+  padding: 8px 12px;
+}
+
+.logic-diagram {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(20, 33, 31, 0.08);
+  background:
+    radial-gradient(circle at top left, rgba(242, 181, 68, 0.12), transparent 30%),
+    rgba(255, 251, 243, 0.92);
+  padding: 10px;
+}
+
+.logic-diagram svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
 }
 
 .summary-card {

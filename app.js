@@ -326,6 +326,7 @@ const state = {
   layout: buildLayout(4),
   cells: Array(16).fill("0"),
   selectedGroup: null,
+  logicForm: "sop",
   lastMessage: "Select a map size or load a preset to start simplifying.",
   cellElements: new Map(),
 };
@@ -344,6 +345,32 @@ function cycleCell(value) {
 
 function formatList(values) {
   return values.length ? values.join(", ") : "none";
+}
+
+function literalSort(left, right) {
+  const leftName = left.replace("'", "");
+  const rightName = right.replace("'", "");
+  const leftIndex = variableNames.indexOf(leftName);
+  const rightIndex = variableNames.indexOf(rightName);
+
+  if (leftIndex !== rightIndex) {
+    return leftIndex - rightIndex;
+  }
+
+  return Number(left.endsWith("'")) - Number(right.endsWith("'"));
+}
+
+function distributePositions(count, start, end) {
+  if (count <= 0) {
+    return [];
+  }
+
+  if (count === 1) {
+    return [(start + end) / 2];
+  }
+
+  const step = (end - start) / (count - 1);
+  return Array.from({ length: count }, (_, index) => start + step * index);
 }
 
 function popcount(number) {
@@ -908,6 +935,491 @@ function updateLayoutCopy() {
   document.getElementById("map-legend").innerHTML = layoutLegendMarkup(state.layout);
 }
 
+function svgElement(name, attributes = {}) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+
+  Object.entries(attributes).forEach(([key, value]) => {
+    node.setAttribute(key, String(value));
+  });
+
+  return node;
+}
+
+function appendSvgText(svg, x, y, text, attributes = {}) {
+  const node = svgElement("text", { x, y, ...attributes });
+  node.textContent = text;
+  svg.append(node);
+  return node;
+}
+
+function drawDiagramBox(svg, options) {
+  const {
+    x,
+    y,
+    width,
+    height,
+    fill = "#fffaf0",
+    stroke = "#14211f",
+    label,
+    subLabel = "",
+    textColor = "#14211f",
+  } = options;
+
+  svg.append(
+    svgElement("rect", {
+      x,
+      y,
+      width,
+      height,
+      rx: Math.min(24, height / 2),
+      fill,
+      stroke,
+      "stroke-width": 2.5,
+    }),
+  );
+
+  appendSvgText(svg, x + width / 2, y + height / 2 - (subLabel ? 6 : -5), label, {
+    fill: textColor,
+    "font-size": subLabel ? 18 : 16,
+    "font-weight": 800,
+    "text-anchor": "middle",
+    "dominant-baseline": "middle",
+  });
+
+  if (subLabel) {
+    appendSvgText(svg, x + width / 2, y + height / 2 + 18, subLabel, {
+      fill: "#4c5c58",
+      "font-size": 13,
+      "font-weight": 600,
+      "text-anchor": "middle",
+      "dominant-baseline": "middle",
+    });
+  }
+}
+
+function gateInputX(gateType, x, width) {
+  return gateType === "OR" ? x + width * 0.18 : x;
+}
+
+function gateTextX(gateType, x, width) {
+  return gateType === "OR" ? x + width * 0.58 : x + width * 0.46;
+}
+
+function gatePath(gateType, x, y, width, height) {
+  if (gateType === "AND") {
+    const bodyWidth = Math.max(width - height / 2, width * 0.5);
+    const radius = height / 2;
+
+    return [
+      `M ${x} ${y}`,
+      `L ${x + bodyWidth} ${y}`,
+      `A ${radius} ${radius} 0 0 1 ${x + bodyWidth} ${y + height}`,
+      `L ${x} ${y + height}`,
+      "Z",
+    ].join(" ");
+  }
+
+  const startX = x + width * 0.18;
+  const upperControlX = x + width * 0.8;
+  const lowerControlX = x + width * 0.8;
+  const backControlX = x + width * 0.34;
+
+  return [
+    `M ${startX} ${y}`,
+    `Q ${upperControlX} ${y} ${x + width} ${y + height / 2}`,
+    `Q ${lowerControlX} ${y + height} ${startX} ${y + height}`,
+    `Q ${backControlX} ${y + height / 2} ${startX} ${y}`,
+    "Z",
+  ].join(" ");
+}
+
+function drawLogicGate(svg, options) {
+  const {
+    x,
+    y,
+    width,
+    height,
+    gateType,
+    fill = "#fffaf0",
+    stroke = "#14211f",
+    label,
+    subLabel = "",
+    textColor = "#14211f",
+  } = options;
+  const centerX = gateTextX(gateType, x, width);
+  const mainY = y + height / 2 - (subLabel ? 9 : -2);
+
+  svg.append(
+    svgElement("path", {
+      d: gatePath(gateType, x, y, width, height),
+      fill,
+      stroke,
+      "stroke-width": 2.5,
+      "stroke-linejoin": "round",
+    }),
+  );
+
+  appendSvgText(svg, centerX, mainY, label, {
+    fill: textColor,
+    "font-size": subLabel ? 18 : 16,
+    "font-weight": 800,
+    "text-anchor": "middle",
+    "dominant-baseline": "middle",
+  });
+
+  if (subLabel) {
+    const subLabelAttributes = {
+      fill: "#4c5c58",
+      "font-size": 12,
+      "font-weight": 700,
+      "text-anchor": "middle",
+      "dominant-baseline": "middle",
+    };
+
+    if (subLabel.length > 6) {
+      subLabelAttributes.textLength = String(width * 0.62);
+      subLabelAttributes.lengthAdjust = "spacingAndGlyphs";
+    }
+
+    appendSvgText(svg, centerX, y + height / 2 + 16, subLabel, subLabelAttributes);
+  }
+}
+
+function drawDiagramLink(svg, points, color, width = 2.5) {
+  svg.append(
+    svgElement("polyline", {
+      points: points.map(({ x, y }) => `${x},${y}`).join(" "),
+      fill: "none",
+      stroke: color,
+      "stroke-width": width,
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+    }),
+  );
+}
+
+function buildLogicDiagramModel(solution) {
+  if (solution.expression === "0" || solution.expression === "1") {
+    return {
+      mode: "constant",
+      form: solution.form,
+      expression: solution.expression,
+      literalGate: null,
+      finalGate: null,
+      terms: [],
+      literals: [],
+    };
+  }
+
+  const terms = solution.groups.map((group, index) => ({
+    id: `${solution.form}-${index}`,
+    color: group.color,
+    label: group.term,
+    inputs: [...group.constantVars].sort(literalSort),
+  }));
+  const literals = [...new Set(terms.flatMap((term) => term.inputs))].sort(literalSort);
+
+  return {
+    mode: terms.length > 1 ? "two-stage" : "single-stage",
+    form: solution.form,
+    expression: solution.expression,
+    literalGate: solution.form === "sop" ? "AND" : "OR",
+    finalGate: solution.form === "sop" ? "OR" : "AND",
+    terms,
+    literals,
+  };
+}
+
+function renderLogicDiagram(sopSolution, posSolution) {
+  const diagram = document.getElementById("logic-diagram");
+  const caption = document.getElementById("logic-caption");
+  const solution = state.logicForm === "pos" ? posSolution : sopSolution;
+  const model = buildLogicDiagramModel(solution);
+  const formLabel = state.logicForm.toUpperCase();
+
+  document.querySelectorAll("[data-logic-form]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.logicForm === state.logicForm);
+  });
+
+  if (model.mode === "constant") {
+    caption.textContent = `${formLabel} collapses to the constant ${model.expression}, so the output is driven directly.`;
+  } else if (model.mode === "single-stage") {
+    caption.textContent =
+      state.logicForm === "sop"
+        ? "A single product term drives the output directly. Complemented literals are marked with '."
+        : "A single sum term drives the output directly. Complemented literals are marked with '.";
+  } else {
+    caption.textContent =
+      state.logicForm === "sop"
+        ? `${model.terms.length} product terms feed a final OR gate. Complemented literals are marked with '.`
+        : `${model.terms.length} sum terms feed a final AND gate. Complemented literals are marked with '.`;
+  }
+
+  diagram.replaceChildren();
+
+  if (model.mode === "constant") {
+    const width = 620;
+    const height = 180;
+    const svg = svgElement("svg", {
+      viewBox: `0 0 ${width} ${height}`,
+      width,
+      height,
+      role: "img",
+      "aria-label": `${formLabel} logic diagram for constant ${model.expression}`,
+    });
+
+    drawDiagramBox(svg, {
+      x: 72,
+      y: 54,
+      width: 150,
+      height: 72,
+      fill: model.expression === "1" ? "#fff0cf" : "#ede5d7",
+      stroke: model.expression === "1" ? "#d76634" : "#8c7b64",
+      label: `CONST ${model.expression}`,
+      subLabel: model.expression === "1" ? "logic high" : "logic low",
+    });
+
+    drawDiagramLink(
+      svg,
+      [
+        { x: 222, y: 90 },
+        { x: 480, y: 90 },
+      ],
+      "#14211f",
+      3,
+    );
+
+    svg.append(
+      svgElement("circle", {
+        cx: 522,
+        cy: 90,
+        r: 20,
+        fill: "#14211f",
+      }),
+    );
+    appendSvgText(svg, 522, 96, "F", {
+      fill: "#fffaf0",
+      "font-size": 18,
+      "font-weight": 800,
+      "text-anchor": "middle",
+    });
+
+    appendSvgText(svg, width / 2, height - 18, `F = ${solution.expression}`, {
+      fill: "#4c5c58",
+      "font-size": 15,
+      "font-weight": 700,
+      "text-anchor": "middle",
+    });
+
+    diagram.append(svg);
+    return;
+  }
+
+  const literalBoxWidth = 92;
+  const literalBoxHeight = 34;
+  const termBoxWidth = model.mode === "two-stage" ? 138 : 146;
+  const finalBoxWidth = 126;
+  const literalX = 28;
+  const termX = model.mode === "two-stage" ? 328 : 420;
+  const finalX = 614;
+  const outputX = model.mode === "two-stage" ? 824 : 716;
+  const width = model.mode === "two-stage" ? 900 : 780;
+  const laneCount = Math.max(model.literals.length, model.terms.length);
+  const height = Math.max(280, 168 + Math.max(0, laneCount - 1) * 58);
+  const literalYs = distributePositions(model.literals.length, 72, height - 92);
+  const termYs = distributePositions(model.terms.length, 72, height - 92);
+  const svg = svgElement("svg", {
+    viewBox: `0 0 ${width} ${height}`,
+    width,
+    height,
+    role: "img",
+    "aria-label": `${formLabel} logic diagram for ${solution.expression}`,
+  });
+  const literalNodes = new Map();
+
+  model.literals.forEach((literal, index) => {
+    const y = literalYs[index];
+    const isComplemented = literal.endsWith("'");
+
+    drawDiagramBox(svg, {
+      x: literalX,
+      y: y - literalBoxHeight / 2,
+      width: literalBoxWidth,
+      height: literalBoxHeight,
+      fill: isComplemented ? "#edf7f5" : "#fff1d8",
+      stroke: isComplemented ? "#1f6b69" : "#d76634",
+      label: literal,
+      textColor: "#14211f",
+    });
+
+    literalNodes.set(literal, {
+      x: literalX + literalBoxWidth,
+      y,
+    });
+  });
+
+  const termNodes = model.terms.map((term, index) => {
+    const heightForTerm = Math.max(76, 38 + term.inputs.length * 10);
+    const node = {
+      ...term,
+      x: termX,
+      y: termYs[index],
+      width: termBoxWidth,
+      height: heightForTerm,
+      inputX: gateInputX(model.literalGate, termX, termBoxWidth),
+      outputX: termX + termBoxWidth,
+      inputYs: distributePositions(
+        term.inputs.length,
+        termYs[index] - heightForTerm / 2 + 18,
+        termYs[index] + heightForTerm / 2 - 18,
+      ),
+    };
+
+    drawLogicGate(svg, {
+      x: node.x,
+      y: node.y - node.height / 2,
+      width: node.width,
+      height: node.height,
+      gateType: model.literalGate,
+      fill: "#fffaf0",
+      stroke: node.color,
+      label: model.literalGate,
+      subLabel: node.label,
+    });
+
+    return node;
+  });
+
+  termNodes.forEach((term) => {
+    term.inputs.forEach((literal, inputIndex) => {
+      const source = literalNodes.get(literal);
+      const targetY = term.inputYs[inputIndex];
+
+      drawDiagramLink(
+        svg,
+        [
+          { x: source.x, y: source.y },
+          { x: term.inputX - 28, y: source.y },
+          { x: term.inputX - 28, y: targetY },
+          { x: term.inputX, y: targetY },
+        ],
+        term.color,
+      );
+
+      svg.append(
+        svgElement("circle", {
+          cx: term.inputX,
+          cy: targetY,
+          r: 3.5,
+          fill: term.color,
+        }),
+      );
+    });
+
+    svg.append(
+      svgElement("circle", {
+        cx: term.outputX,
+        cy: term.y,
+        r: 4,
+        fill: term.color,
+      }),
+    );
+  });
+
+  const outputY = height / 2;
+
+  if (model.mode === "two-stage") {
+    const finalHeight = Math.max(92, 36 + termNodes.length * 11);
+    const finalInputX = gateInputX(model.finalGate, finalX, finalBoxWidth);
+    const finalOutputX = finalX + finalBoxWidth;
+    const finalInputYs = distributePositions(
+      termNodes.length,
+      outputY - finalHeight / 2 + 18,
+      outputY + finalHeight / 2 - 18,
+    );
+
+    drawLogicGate(svg, {
+      x: finalX,
+      y: outputY - finalHeight / 2,
+      width: finalBoxWidth,
+      height: finalHeight,
+      gateType: model.finalGate,
+      fill: "#fffaf0",
+      stroke: "#14211f",
+      label: model.finalGate,
+    });
+
+    termNodes.forEach((term, index) => {
+      drawDiagramLink(
+        svg,
+        [
+          { x: term.outputX, y: term.y },
+          { x: finalInputX - 34, y: term.y },
+          { x: finalInputX - 34, y: finalInputYs[index] },
+          { x: finalInputX, y: finalInputYs[index] },
+        ],
+        term.color,
+        2.75,
+      );
+
+      svg.append(
+        svgElement("circle", {
+          cx: finalInputX,
+          cy: finalInputYs[index],
+          r: 3.5,
+          fill: term.color,
+        }),
+      );
+    });
+
+    drawDiagramLink(
+      svg,
+      [
+        { x: finalOutputX, y: outputY },
+        { x: outputX - 22, y: outputY },
+      ],
+      "#14211f",
+      3,
+    );
+  } else {
+    const [term] = termNodes;
+
+    drawDiagramLink(
+      svg,
+      [
+        { x: term.outputX, y: term.y },
+        { x: outputX - 22, y: outputY },
+      ],
+      term.color,
+      3,
+    );
+  }
+
+  svg.append(
+    svgElement("circle", {
+      cx: outputX,
+      cy: outputY,
+      r: 20,
+      fill: "#14211f",
+    }),
+  );
+  appendSvgText(svg, outputX, outputY + 6, "F", {
+    fill: "#fffaf0",
+    "font-size": 18,
+    "font-weight": 800,
+    "text-anchor": "middle",
+  });
+
+  appendSvgText(svg, width / 2, height - 18, `F = ${solution.expression}`, {
+    fill: "#4c5c58",
+    "font-size": 15,
+    "font-weight": 700,
+    "text-anchor": "middle",
+  });
+
+  diagram.append(svg);
+}
+
 function render() {
   const sopSolution = solveForm(state.cells, state.variableCount, "sop");
   const posSolution = solveForm(state.cells, state.variableCount, "pos");
@@ -959,6 +1471,7 @@ function render() {
   document.getElementById("canonical-sop-expression").textContent = sopSolution.canonical;
   document.getElementById("canonical-pos-expression").textContent = posSolution.canonical;
   document.getElementById("challenge-copy").textContent = state.lastMessage;
+  renderLogicDiagram(sopSolution, posSolution);
 
   const groupList = document.getElementById("group-list");
   groupList.replaceChildren();
@@ -1178,6 +1691,13 @@ function attachEvents() {
       return;
     }
 
+    const logicButton = event.target.closest("[data-logic-form]");
+    if (logicButton) {
+      state.logicForm = logicButton.dataset.logicForm;
+      render();
+      return;
+    }
+
     const actionButton = event.target.closest("[data-action]");
     if (!actionButton) {
       return;
@@ -1214,6 +1734,7 @@ if (typeof document !== "undefined") {
 if (typeof module !== "undefined") {
   module.exports = {
     buildLayout,
+    buildLogicDiagramModel,
     getPresetsForCount,
     solveForm,
     simplify,
